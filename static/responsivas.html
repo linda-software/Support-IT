@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta name="description" content="Control de activos y responsivas de Infraestructura — Empresa Demo">
+<!--
+===============================================================================
+AUTORA Y RESPONSABLE FUNCIONAL: Jazmin Lopez Zamora
+MÓDULO: Activos, asignaciones y responsivas digitales
+VERSIÓN: v2 servidor · 2026-09-08
+
+ARQUITECTURA:
+- Frontend: este archivo HTML/JS.
+- Persistencia: API REST /api/*, con PostgreSQL recomendado y SQLite como respaldo local.
+- Documentos: los PDF se envían a /api/responsivas/upload. Si Google Drive está
+  configurado, el servidor los guarda en el Drive/Shared Drive corporativo;
+  si no, quedan en uploads/ para no perder el registro.
+- Odoo: el vínculo se realiza desde el backend. Nunca se guardan claves de Odoo
+  ni credenciales de Google en este HTML.
+===============================================================================
+-->
+<title>Control de Equipos TI</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#faf8f4; --surface:#ffffff; --surface-2:#f2efe6; --surface-3:#e9e4d6;
+    --border:#e1dccd; --border-strong:#cdc6b2;
+    --text:#221f18; --text-muted:#6c6656; --text-faint:#9a937f;
+    --accent:#2a5d84; --accent-hover:#204a6a; --accent-soft:#e5edf3; --accent-ink:#ffffff;
+    --good:#2f7a4f; --good-soft:#e3f1e8;
+    --info:#1f8a9e; --info-soft:#e1f0f2;
+    --warn:#b1791b; --warn-soft:#f6ecd8;
+    --bad:#b23c3c; --bad-soft:#f8e6e5;
+    --old:#7c6a4e; --old-soft:#efe8d9;
+    --shadow:0 1px 2px rgba(34,31,24,.05), 0 8px 24px -12px rgba(34,31,24,.18);
+    --radius:12px; --radius-sm:8px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#17150f; --surface:#211e17; --surface-2:#2a271e; --surface-3:#37331f;
+      --border:#3a3527; --border-strong:#4b4530;
+      --text:#f2ede0; --text-muted:#b3ab94; --text-faint:#7d765f;
+      --accent:#7cb2dc; --accent-hover:#95c2e5; --accent-soft:#243441; --accent-ink:#0f1c26;
+      --good:#7fd39f; --good-soft:#1e3628;
+      --info:#7fd0de; --info-soft:#1b3438;
+      --warn:#e9b969; --warn-soft:#3a2f18;
+      --bad:#e58f8f; --bad-soft:#3d2323;
+      --old:#c9b78f; --old-soft:#332c1c;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#17150f; --surface:#211e17; --surface-2:#2a271e; --surface-3:#37331f;
+    --border:#3a3527; --border-strong:#4b4530;
+    --text:#f2ede0; --text-muted:#b3ab94; --text-faint:#7d765f;
+    --accent:#7cb2dc; --accent-hover:#95c2e5; --accent-soft:#243441; --accent-ink:#0f1c26;
+    --good:#7fd39f; --good-soft:#1e3628;
+    --info:#7fd0de; --info-soft:#1b3438;
+    --warn:#e9b969; --warn-soft:#3a2f18;
+    --bad:#e58f8f; --bad-soft:#3d2323;
+    --old:#c9b78f; --old-soft:#332c1c;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.5;}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;}
+  h1,h2,h3{font-weight:600;letter-spacing:-.01em;text-wrap:balance;margin:0;}
+  button{font-family:inherit;font-size:inherit;cursor:pointer;}
+  input,select,textarea{font-family:inherit;font-size:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:8px 10px;}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;}
+  ::placeholder{color:var(--text-faint);}
+  .app{display:flex;min-height:100vh;}
+
+  /* Sidebar */
+  .sidebar{width:230px;flex:0 0 230px;background:var(--surface);border-right:1px solid var(--border);padding:20px 14px;display:flex;flex-direction:column;gap:18px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+  .brand{display:flex;flex-direction:column;gap:2px;padding:0 8px;}
+  .brand .name{font-size:16px;font-weight:700;letter-spacing:-.01em;}
+  .brand .tag{font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
+  nav.navlist{display:flex;flex-direction:column;gap:2px;}
+  .navbtn{display:flex;align-items:center;gap:10px;text-align:left;background:transparent;border:none;color:var(--text-muted);padding:9px 10px;border-radius:var(--radius-sm);font-weight:500;}
+  .navbtn:hover{background:var(--surface-2);color:var(--text);}
+  .navbtn.active{background:var(--accent-soft);color:var(--accent);}
+  .navbtn svg{flex:0 0 auto;opacity:.85;}
+  .sidebar-foot{margin-top:auto;padding:10px 8px;font-size:11.5px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:12px;}
+
+  /* Main */
+  .main{flex:1;min-width:0;padding:26px 32px 60px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .view-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:20px;flex-wrap:wrap;}
+  .view-head h1{font-size:22px;}
+  .view-head p{margin:4px 0 0;color:var(--text-muted);font-size:13px;max-width:60ch;}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
+  .pad{padding:18px 20px;}
+
+  /* KPI row */
+  .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
+  .kpi{padding:14px 16px;display:flex;flex-direction:column;gap:4px;}
+  .kpi .num{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .kpi .lbl{font-size:12px;color:var(--text-muted);}
+  .kpi.accent{border-color:var(--accent);}
+
+  .grid-2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;align-items:start;}
+  @media (max-width:980px){.grid-2{grid-template-columns:1fr;}}
+
+  .section-title{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:0 0 10px;}
+
+  .barlist{display:flex;flex-direction:column;gap:9px;}
+  .barrow{display:grid;grid-template-columns:88px 1fr 40px;align-items:center;gap:10px;font-size:12.5px;}
+  .barrow .track{background:var(--surface-3);border-radius:6px;height:10px;overflow:hidden;}
+  .barrow .fill{height:100%;border-radius:6px;}
+  .barrow .count{text-align:right;font-variant-numeric:tabular-nums;color:var(--text-muted);}
+
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+  .badge.nuevo{background:var(--info-soft);color:var(--info);}
+  .badge.excelente{background:var(--good-soft);color:var(--good);}
+  .badge.operable{background:var(--warn-soft);color:var(--warn);}
+  .badge.dañado{background:var(--bad-soft);color:var(--bad);}
+  .badge.viejo{background:var(--old-soft);color:var(--old);}
+  .badge.stock{background:var(--surface-3);color:var(--text-muted);}
+  .badge.vigente{background:var(--good-soft);color:var(--good);}
+  .badge.cerrada{background:var(--surface-3);color:var(--text-muted);}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border);}
+  td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  .table-wrap{overflow-x:auto;}
+  .empty{padding:34px 20px;text-align:center;color:var(--text-muted);}
+  .empty .big{font-size:28px;margin-bottom:6px;}
+
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font-weight:500;}
+  .btn:hover{background:var(--surface-2);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
+  .btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);}
+  .btn.ghost{border-color:transparent;background:transparent;}
+  .btn.ghost:hover{background:var(--surface-2);}
+  .btn.danger{color:var(--bad);}
+  .btn.sm{padding:5px 10px;font-size:12px;border-radius:7px;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+
+  .field{display:flex;flex-direction:column;gap:5px;}
+  .field label{font-size:12.5px;font-weight:600;color:var(--text-muted);}
+  .field .hint{font-size:11px;color:var(--text-faint);font-weight:400;}
+  .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+  @media (max-width:680px){.form-grid{grid-template-columns:1fr;}}
+  .form-grid.cols-3{grid-template-columns:repeat(3,1fr);}
+  @media (max-width:820px){.form-grid.cols-3{grid-template-columns:repeat(2,1fr);}}
+  .span-2{grid-column:span 2;}
+  @media (max-width:680px){.span-2{grid-column:span 1;}}
+
+  .toggle-row{display:flex;gap:8px;background:var(--surface-2);padding:4px;border-radius:var(--radius-sm);width:fit-content;margin-bottom:18px;}
+  .toggle-row button{border:none;background:transparent;padding:8px 16px;border-radius:7px;font-weight:600;color:var(--text-muted);}
+  .toggle-row button.active{background:var(--surface);color:var(--accent);box-shadow:var(--shadow);}
+
+  .searchbar{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+  .searchbar input{flex:1;min-width:220px;}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .filters select, .filters input{min-width:150px;}
+
+  .toast{position:fixed;bottom:22px;right:22px;background:var(--text);color:var(--bg);padding:12px 18px;border-radius:var(--radius-sm);box-shadow:var(--shadow);font-size:13px;z-index:200;max-width:340px;opacity:0;transform:translateY(8px);transition:all .25s ease;pointer-events:none;}
+  .toast.show{opacity:1;transform:translateY(0);}
+  .toast.error{background:var(--bad);color:#fff;}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,18,12,.45);display:none;align-items:center;justify-content:center;z-index:150;padding:20px;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);width:100%;max-width:480px;max-height:90vh;overflow-y:auto;}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);}
+  .modal-head h3{font-size:16px;}
+  .modal-body{padding:18px 20px;display:flex;flex-direction:column;gap:14px;}
+  .modal-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+
+  .history-item{border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;display:flex;flex-direction:column;gap:6px;}
+  .history-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+  .history-meta{font-size:12px;color:var(--text-muted);}
+  .person-group{display:flex;flex-direction:column;gap:10px;margin-bottom:18px;}
+  .person-group-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:2px 2px 6px;border-bottom:1px solid var(--border);}
+  .person-group-head h3{font-size:15px;}
+
+  .equipo-line{display:flex;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--text-muted);}
+  .equipo-line b{color:var(--text);font-weight:600;}
+  .divider{height:1px;background:var(--border);margin:16px 0;}
+  .banner{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:var(--radius-sm);background:var(--warn-soft);color:var(--warn);font-size:13px;margin-bottom:16px;}
+  .status-select-row{display:flex;gap:6px;flex-wrap:wrap;}
+  .chip{padding:5px 11px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface);font-size:12px;font-weight:600;color:var(--text-muted);}
+  .chip.active{border-color:transparent;}
+  .chip.nuevo.active{background:var(--info-soft);color:var(--info);}
+  .chip.excelente.active{background:var(--good-soft);color:var(--good);}
+  .chip.operable.active{background:var(--warn-soft);color:var(--warn);}
+  .chip.dañado.active{background:var(--bad-soft);color:var(--bad);}
+  .chip.viejo.active{background:var(--old-soft);color:var(--old);}
+
+  @media (max-width:760px){
+    .app{flex-direction:column;}
+    .sidebar{width:100%;flex:none;height:auto;position:relative;flex-direction:row;align-items:center;overflow-x:auto;padding:12px;}
+    nav.navlist{flex-direction:row;}
+    .sidebar-foot{display:none;}
+    .main{padding:20px 16px 50px;}
+  }
+
+  html[data-role="standard"] [data-nav="nueva"],
+  html[data-role="standard"] [data-action="baja"],
+  html[data-role="standard"] [data-action="cambiar-estatus"]{display:none!important;}
+</style>
+
+<script src="/static/app-shell.js"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="name">Empresa Demo · Infraestructura</div>
+      <div class="tag">Activos & Responsivas</div>
+    </div>
+    <nav class="navlist" id="nav"></nav>
+    <div class="sidebar-foot">Activos y responsivas digitales · Infraestructura.</div>
+  </aside>
+
+  <main class="main">
+
+    <section class="view" data-view="dashboard">
+      <div class="view-head">
+        <div><h1>Resumen general</h1><p>Estado del inventario tecnológico y actividad reciente de responsivas.</p></div>
+        <button class="btn primary" data-nav="nueva">+ Nueva responsiva</button>
+      </div>
+      <div id="dash-kpis" class="kpi-row"></div>
+      <div class="grid-2">
+        <div class="card pad">
+          <div class="section-title">Equipos por estatus</div>
+          <div id="dash-bars" class="barlist"></div>
+        </div>
+        <div class="card pad">
+          <div class="section-title">Actividad reciente</div>
+          <div id="dash-recent"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" data-view="nueva">
+      <div class="view-head">
+        <div><h1>Nueva responsiva</h1><p>Captura la entrega de un equipo. Se genera el historial y podrás descargar el PDF firmable al terminar.</p></div>
+      </div>
+      <div class="card pad">
+        <div class="toggle-row" id="tipo-toggle">
+          <button class="active" data-tipo="individual">Individual</button>
+          <button data-tipo="operaciones">Operaciones</button>
+        </div>
+        <form id="form-nueva"></form>
+      </div>
+    </section>
+
+    <section class="view" data-view="serie">
+      <div class="view-head">
+        <div><h1>Buscar por número de serie</h1><p>Consulta el historial completo de un equipo: quién lo ha tenido y en qué estado.</p></div>
+      </div>
+      <div class="searchbar">
+        <input type="text" id="serie-input" class="mono" placeholder="Número de serie, ej. 1H95200JRS" autocomplete="off">
+        <button class="btn primary" id="serie-buscar">Buscar</button>
+      </div>
+      <div id="serie-result"></div>
+    </section>
+
+    <section class="view" data-view="nombre">
+      <div class="view-head">
+        <div><h1>Buscar por nombre</h1><p>Encuentra los equipos de un colaborador, descarga su responsiva o registra su baja.</p></div>
+      </div>
+      <div class="searchbar">
+        <input type="text" id="nombre-input" placeholder="Nombre del colaborador, gerente o líder de operación" autocomplete="off">
+        <button class="btn primary" id="nombre-buscar">Buscar</button>
+      </div>
+      <div id="nombre-result"></div>
+    </section>
+
+    <section class="view" data-view="inventario">
+      <div class="view-head">
+        <div><h1>Inventario completo</h1><p>Todos los equipos registrados, su estatus y responsable actual.</p></div>
+      </div>
+      <div class="filters">
+        <input type="text" id="inv-texto" placeholder="Buscar serie, marca, modelo o responsable...">
+        <select id="inv-estatus">
+          <option value="">Todos los estatus</option>
+          <option>Nuevo</option><option>Excelente</option><option>Operable</option><option>Dañado</option><option>Viejo</option>
+        </select>
+        <select id="inv-sucursal"><option value="">Todas las sucursales</option></select>
+      </div>
+      <div class="card"><div class="table-wrap" id="inv-table"></div></div>
+    </section>
+
+  </main>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+
+/* ============================= API ADAPTER =============================
+   Sustituye la base de datos propietaria del prototipo por una API HTTP estándar.
+   Esto permite abrir el módulo desde cualquier equipo autorizado de la red local.
+   ====================================================================== */
+class ApiDocRef {
+  constructor(db, collection, id){ this.db=db; this.collectionName=collection; this.id=id; }
+  async update(data){ return this.db.request(`/api/${this.collectionName}/${encodeURIComponent(this.id)}`, {method:'PATCH', body:JSON.stringify(data)}); }
+  async set(data){ return this.db.request(`/api/${this.collectionName}/${encodeURIComponent(this.id)}`, {method:'PUT', body:JSON.stringify(data)}); }
+}
+class ApiCollectionRef {
+  constructor(db,name,limitValue=null){ this.db=db; this.name=name; this.limitValue=limitValue; }
+  limit(n){ return new ApiCollectionRef(this.db,this.name,n); }
+  async add(data){ const r=await this.db.request(`/api/${this.name}`, {method:'POST',body:JSON.stringify(data)}); return {id:r.id}; }
+  onSnapshot(onData,onError){
+    let stopped=false;
+    const load=async()=>{
+      try{
+        const suffix=this.limitValue?`?limit=${encodeURIComponent(this.limitValue)}`:'';
+        const rows=await this.db.request(`/api/${this.name}${suffix}`);
+        if(stopped) return;
+        onData({docs:rows.map(row=>({id:row.id,data:()=>row}))});
+      }catch(err){ if(onError) onError(err); }
+    };
+    load();
+    const timer=setInterval(load,10000);
+    return ()=>{stopped=true;clearInterval(timer);};
+  }
+}
+class ApiDatabase {
+  async request(url,opts={}){
+    const options={headers:{'Content-Type':'application/json','Accept':'application/json'},...opts};
+    if(opts.headers) options.headers={...options.headers,...opts.headers};
+    const r=await fetch(url,options);
+    if(!r.ok){ let msg=`HTTP ${r.status}`; try{const e=await r.json();msg=e.error||e.detail||msg}catch(_){} throw new Error(msg); }
+    if(r.status===204) return {};
+    return r.json();
+  }
+  collection(name){ return new ApiCollectionRef(this,name); }
+  doc(path){ const [collection,id]=path.split('/'); return new ApiDocRef(this,collection,id); }
+}
+const browserDownloads = {
+  async save({filename,data,metadata}){
+    // 1) Guardar copia local para el usuario.
+    const url=URL.createObjectURL(data); const a=document.createElement('a'); a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+    // 2) Enviar al backend para Drive/Shared Drive o respaldo local del servidor.
+    try{
+      const fd=new FormData(); fd.append('file',data,filename); fd.append('metadata',JSON.stringify(metadata||{}));
+      const r=await fetch('/api/responsivas/upload',{method:'POST',body:fd});
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    }catch(err){ console.warn('No se pudo archivar el PDF en el servidor:',err); return {stored:false}; }
+  }
+};
+
+/* ============================= CONFIG ============================= */
+const ESTATUS = ["Nuevo","Excelente","Operable","Dañado","Viejo"];
+const ESTATUS_CLASS = {Nuevo:"nuevo",Excelente:"excelente",Operable:"operable","Dañado":"dañado",Viejo:"viejo"};
+const ESTATUS_COLOR_VAR = {Nuevo:"--info",Excelente:"--good",Operable:"--warn","Dañado":"--bad",Viejo:"--old"};
+const TIPOS_DISPOSITIVO = ["Laptop","Equipo de escritorio","Celular","Tablet","Escáner","Impresora","Otro"];
+const NAV_ITEMS = [
+  {id:"dashboard", label:"Resumen", icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>'},
+  {id:"nueva", label:"Nueva responsiva", icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'},
+  {id:"serie", label:"Buscar por serie", icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="10" rx="1.5"/><path d="M7 7v10M11 7v10M15 7v10"/></svg>'},
+  {id:"nombre", label:"Buscar por nombre", icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="7.5" r="3.5"/><path d="M4 20c0-4 3.2-6.5 7-6.5s7 2.5 7 6.5M18 8l2 2 3-3.5"/></svg>'},
+  {id:"inventario", label:"Inventario", icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>'},
+];
+
+/* ============================= STATE ============================= */
+const state = {
+  db: null,
+  downloadsCap: null,
+  view: "dashboard",
+  equipos: new Map(),     // serialSlug -> equipo data
+  asignaciones: new Map(),// id -> asignacion data
+  nuevaTipo: "individual",
+  ready: false,
+};
+
+/* ============================= HELPERS ============================= */
+function slugSerial(s){
+  return (s||"").trim().toUpperCase().replace(/[^A-Z0-9_\-.~:@+]/g,"-").slice(0,120) || "SN-" + Date.now();
+}
+function normalize(s){
+  return (s||"").toString().normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim();
+}
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(iso){
+  if(!iso) return "—";
+  const [y,m,d] = iso.split("-");
+  if(!y||!m||!d) return iso;
+  const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  return `${d} ${meses[parseInt(m,10)-1]} ${y}`;
+}
+function escapeHtml(s){
+  return (s===undefined||s===null?"":String(s)).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function badgeEstatus(e){
+  const cls = ESTATUS_CLASS[e] || "stock";
+  return `<span class="badge ${cls}">${escapeHtml(e||"Sin estatus")}</span>`;
+}
+function showToast(msg, isError){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (isError ? " error" : "");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>{ t.className = "toast"; }, 3600);
+}
+function el(html){ const d=document.createElement("div"); d.innerHTML=html.trim(); return d.firstElementChild; }
+
+/* ============================= NAV / ROUTER ============================= */
+function renderNav(){
+  const nav = document.getElementById("nav");
+  nav.innerHTML = NAV_ITEMS.map(item=>`
+    <button class="navbtn ${state.view===item.id?'active':''}" data-nav="${item.id}">${item.icon}<span>${item.label}</span></button>
+  `).join("");
+}
+function goTo(view){
+  state.view = view;
+  document.querySelectorAll(".view").forEach(v=> v.classList.toggle("active", v.dataset.view===view));
+  renderNav();
+  if(view==="dashboard") renderDashboard();
+  if(view==="inventario") renderInventario();
+}
+document.addEventListener("click", (e)=>{
+  const navBtn = e.target.closest("[data-nav]");
+  if(navBtn){ goTo(navBtn.dataset.nav); }
+});
+
+/* ============================= CLÁUSULAS LEGALES ============================= */
+const CLAUSULAS_INDIVIDUAL = [
+{t:"1. RESPONSABILIDAD DE CUSTODIA Y CONTROL DE EQUIPOS TECNOLÓGICOS ASIGNADOS", p:[
+"El colaborador será responsable de supervisar y garantizar la correcta custodia, conservación y uso adecuado de los equipos tecnológicos que le sean asignados para el desempeño de sus funciones.",
+"La firma del colaborador en la presente responsiva representa la aceptación de la responsabilidad sobre los activos tecnológicos que le sean entregados, incluyendo, pero no limitado a: equipos celulares, equipos de cómputo, dispositivos de escaneo, periféricos y cualquier otro recurso tecnológico propiedad de Empresa Demo."]},
+{t:"2. RESPONSABILIDAD DEL COLABORADOR SOBRE LOS EQUIPOS ASIGNADOS", p:[
+"El colaborador reconoce y acepta la responsabilidad de mantener bajo su custodia los activos tecnológicos que le sean asignados para el desarrollo de sus actividades laborales.",
+"Los equipos tecnológicos, accesorios, herramientas, sistemas, aplicaciones y la información generada o almacenada en dichos recursos son propiedad de Empresa Demo y deberán mantenerse bajo condiciones adecuadas de resguardo, evitando cualquier situación que pueda ocasionar daño, pérdida, robo, extravío o uso indebido.",
+"El colaborador deberá asegurar que los equipos asignados sean utilizados exclusivamente para las actividades operativas y administrativas autorizadas por la compañía."]},
+{t:"3. CONTROL DE INVENTARIO Y TRAZABILIDAD DE ACTIVOS TECNOLÓGICOS", p:[
+"El colaborador deberá mantener identificado y bajo control el inventario tecnológico que le haya sido asignado, incluyendo equipos celulares, computadoras, escáneres, accesorios y cualquier otro activo proporcionado por Empresa Demo.",
+"Cuando exista cambio de puesto, cambio de sucursal, sustitución de responsable, baja laboral o cualquier modificación que implique movimiento o transferencia del equipo, deberá realizarse una validación física del inventario.",
+"La entrega del equipo deberá efectuarse al nuevo responsable asignado y al área de Tecnologías de Información, con el objetivo de mantener actualizada la trazabilidad del activo durante todo su ciclo de vida.",
+"En caso de detectar diferencias entre el inventario físico y los registros existentes, equipos no localizados o faltantes, el caso será escalado a las áreas correspondientes para su investigación y determinación de responsabilidades."]},
+{t:"4. MOVIMIENTO Y REASIGNACIÓN DE EQUIPOS TECNOLÓGICOS", p:[
+"Los equipos tecnológicos asignados a los colaboradores son para uso personal y exclusivo del colaborador al que fueron asignados, por lo que no deberán ser prestados, intercambiados o utilizados por personas distintas al responsable del equipo, salvo autorización expresa de la compañía.",
+"En caso de que, por necesidades operativas, sea necesario sustituir, reasignar o cambiar la responsabilidad de un equipo, el movimiento deberá ser coordinado por el jefe inmediato, quien deberá informar al área de Tecnologías de Información a través del correo soporte@empresa_demo.mx, proporcionando la información necesaria para mantener actualizado el control y la trazabilidad del activo.",
+"La omisión de informar una reasignación o cambio de responsable podrá generar diferencias en los controles de inventario y será considerada una desviación al proceso establecido por la compañía."]},
+{t:"5. ROBO, EXTRAVÍO O DAÑO DE EQUIPOS TECNOLÓGICOS", p:[
+"En caso de presentarse robo, extravío o daño de algún equipo tecnológico asignado al colaborador, este deberá asegurar que el incidente sea reportado de manera inmediata a las áreas correspondientes, manteniendo informado al área de Tecnologías de Información mediante el correo soporte@empresa_demo.mx.",
+"El reporte deberá incluir toda la información disponible del incidente, incluyendo sucursal, fecha, hora, descripción de los hechos, equipo afectado, marca, modelo, número de serie y responsable operativo del equipo.",
+"Cuando el incidente corresponda a un posible robo, deberá realizarse la denuncia correspondiente ante la autoridad competente conforme a las circunstancias del evento, entregando posteriormente la documentación generada para el seguimiento interno.",
+"En caso de daño físico, deberá realizarse la validación correspondiente con el área de Tecnologías de Información para determinar la condición del equipo y las acciones necesarias para su reparación o sustitución."]},
+{t:"6. AUSENCIA DEL COLABORADOR RESPONSABLE", p:[
+"En caso de ausencia temporal o definitiva del colaborador, el equipo tecnológico asignado deberá quedar bajo resguardo del jefe inmediato, quien será responsable de coordinar la entrega, resguardo o reasignación correspondiente.",
+"Cuando la ausencia sea definitiva o implique un cambio de responsabilidad sobre el equipo, el jefe inmediato deberá informar al área de Tecnologías de Información para actualizar el control del activo y mantener la trazabilidad correspondiente.",
+"Estas medidas tienen como finalidad garantizar la continuidad operativa y prevenir situaciones de robo, extravío, daño o uso no autorizado de los activos tecnológicos."]},
+{t:"7. USO AUTORIZADO DE EQUIPOS TECNOLÓGICOS", p:[
+"Los equipos tecnológicos proporcionados por Empresa Demo son herramientas de trabajo destinadas exclusivamente al cumplimiento de las funciones operativas y administrativas autorizadas.",
+"Queda estrictamente prohibido utilizar los equipos tecnológicos para acceder, reproducir, descargar o transmitir contenido ajeno a las funciones laborales, incluyendo, de manera enunciativa mas no limitativa, redes sociales, plataformas de streaming, servicios de video, servicios de audio o cualquier otro contenido de entretenimiento que no esté relacionado con las actividades laborales.",
+"Asimismo, queda prohibido instalar aplicaciones no autorizadas, modificar configuraciones establecidas por Tecnologías de Información, compartir accesos o realizar cualquier actividad que pueda comprometer la seguridad tecnológica de la compañía.",
+"Cualquier incumplimiento será informado a las áreas correspondientes para la evaluación y aplicación de las medidas administrativas establecidas por la compañía."]},
+{t:"8. DETERMINACIÓN DE RESPONSABILIDADES", p:[
+"En caso de incumplimiento, daño, pérdida, robo, extravío o uso indebido de los activos tecnológicos, Empresa Demo realizará la investigación correspondiente mediante las áreas involucradas, considerando las circunstancias del incidente, la evidencia disponible, el nivel de afectación, las causas que lo originaron y la responsabilidad determinada.",
+"Derivado de dicha evaluación, podrán aplicarse las medidas administrativas, laborales o legales correspondientes conforme a las políticas internas de la compañía.",
+"Cuando exista afectación económica derivada de daños, pérdida o reposición de equipos tecnológicos, Empresa Demo podrá determinar la recuperación parcial o total del costo asociado, considerando el nivel de daño, condición del equipo, valor del activo y la responsabilidad establecida durante la investigación."]}
+];
+const VALIDACION_INDIVIDUAL = "El colaborador que firma la presente constancia declara conocer y aceptar las obligaciones relacionadas con la custodia, uso adecuado y conservación de los equipos tecnológicos propiedad de Empresa Demo, comprometiéndose a mantener los controles necesarios para evitar pérdidas, daños, robos o usos no autorizados.";
+
+const PREAMBULO_OPERACIONES = {
+  t:"RESPONSABILIDAD DEL GERENTE DE OPERACIONES SOBRE LOS EQUIPOS ASIGNADOS A SU REGIÓN",
+  p:[
+"El Gerente de Operaciones será responsable de supervisar y garantizar la correcta custodia, conservación y uso adecuado de los equipos tecnológicos asignados a las sucursales bajo su responsabilidad regional.",
+"La firma del Gerente de Operaciones en la presente responsiva representa la aceptación de la responsabilidad sobre los activos tecnológicos entregados a las tiendas correspondientes, incluyendo, pero no limitado a: equipos celulares, equipos de cómputo, dispositivos de escaneo, periféricos y cualquier otro recurso tecnológico propiedad de Empresa Demo.",
+"La firma del Líder de Operaciones deberá realizarse posterior a la validación y aceptación del Gerente de Operaciones, debido a que el Gerente de Operaciones será el responsable de asegurar que existan controles adecuados para prevenir pérdidas, robos, daños o mal uso de los equipos durante la operación de las sucursales."]
+};
+const CLAUSULAS_OPERACIONES = [
+{t:"1. RESPONSABILIDAD DE CUSTODIA Y CONTROL DE EQUIPOS TECNOLÓGICOS ASIGNADOS", p:[
+"El Gerente de Operaciones reconoce y acepta la responsabilidad de supervisar la correcta custodia, control y administración de los equipos tecnológicos asignados a las sucursales bajo su responsabilidad regional.",
+"Los equipos tecnológicos, accesorios, herramientas, sistemas, aplicaciones y la información generada o almacenada en dichos recursos son propiedad de Empresa Demo y deberán mantenerse bajo condiciones adecuadas de resguardo, evitando cualquier situación que pueda ocasionar daño, pérdida, robo, extravío o uso indebido.",
+"El Gerente de Operaciones deberá asegurar que los equipos asignados a las sucursales sean utilizados exclusivamente para las actividades operativas de la compañía, promoviendo que los Líder de Operaciones y colaboradores autorizados conozcan y cumplan los lineamientos establecidos por el área de Tecnologías de Información.",
+"En caso de detectar desviaciones en el control, uso o resguardo de los activos tecnológicos, el Gerente de Operaciones deberá realizar las acciones necesarias para corregir la situación e informar al área correspondiente cuando aplique."]},
+{t:"2. RESPONSABILIDAD DEL GERENTE DE OPERACIONES Y LÍDER DE OPERACIÓN", p:[
+"El Gerente de Operaciones será responsable de validar y aceptar la custodia de los activos tecnológicos asignados a las sucursales que conforman su región, siendo su firma la evidencia de aceptación y conocimiento sobre los equipos existentes bajo su administración.",
+"La responsabilidad del Líder de Operación estará relacionada con el control operativo diario de los equipos asignados dentro de la sucursal, asegurando que permanezcan disponibles, identificados y resguardados durante la operación.",
+"La aceptación del Líder de Operación deberá realizarse posterior a la validación del Gerente de Operaciones, con el objetivo de mantener claridad sobre la cadena de responsabilidad y garantizar la correcta administración de los activos tecnológicos propiedad de Empresa Demo."]},
+{t:"3. CONTROL DE INVENTARIO Y TRAZABILIDAD DE ACTIVOS TECNOLÓGICOS", p:[
+"El Gerente de Operaciones deberá asegurar que las sucursales bajo su administración mantengan identificado y controlado el inventario tecnológico asignado, incluyendo equipos celulares, computadoras, escáneres, accesorios y cualquier otro activo proporcionado por Empresa Demo.",
+"Cuando exista cambio de región, sustitución de responsable, cierre de sucursal, mudanza o cualquier modificación operativa que implique movimiento o transferencia de equipos, deberá realizarse una validación física del inventario.",
+"La entrega del inventario deberá efectuarse al nuevo responsable asignado y al área de Tecnologías de Información, con el objetivo de mantener actualizada la trazabilidad del activo durante todo su ciclo de vida.",
+"En caso de detectar diferencias entre el inventario físico y los registros existentes, equipos no localizados o faltantes, el caso será escalado a las áreas correspondientes para su investigación y determinación de responsabilidades."]},
+{t:"4. MOVIMIENTO Y REASIGNACIÓN DE EQUIPOS TECNOLÓGICOS", p:[
+"Los equipos tecnológicos podrán ser trasladados, sustituidos o reasignados cuando las necesidades operativas de la compañía lo requieran, siempre y cuando se mantenga actualizado el control del activo.",
+"El responsable del movimiento deberá notificar al área de Tecnologías de Información mediante el correo soporte@empresa_demo.mx y con CC al supervisor del área, proporcionando la información necesaria para actualizar la trazabilidad correspondiente, incluyendo ubicación, sucursal destino y nuevo responsable asignado.",
+"La omisión de informar movimientos, cambios de ubicación o reasignaciones podrá generar diferencias en los controles de inventario y será considerada una desviación al proceso establecido por la compañía."]},
+{t:"5. ROBO, EXTRAVÍO O DAÑO DE EQUIPOS TECNOLÓGICOS", p:[
+"En caso de presentarse robo, extravío o daño de algún equipo tecnológico asignado a una sucursal, el Gerente de Operaciones deberá asegurar que el incidente sea reportado de manera inmediata al área de Seguridad Patrimonial, manteniendo en copia al área de Tecnologías de Información mediante el correo soporte@empresa_demo.mx y con CC al supervisor del área.",
+"El reporte deberá incluir toda la información disponible del incidente, incluyendo sucursal, fecha, hora, descripción de los hechos, equipo afectado, marca, modelo, número de serie y responsable operativo del equipo.",
+"Cuando el incidente corresponda a un posible robo, deberá realizarse la denuncia correspondiente ante la autoridad competente conforme a las circunstancias del evento, entregando posteriormente la documentación generada para el seguimiento interno.",
+"En caso de daño físico, deberá realizarse la validación correspondiente con el área de Tecnologías de Información para determinar la condición del equipo y las acciones necesarias para su reparación o sustitución."]},
+{t:"6. AUSENCIA DEL LÍDER DE OPERACIÓN", p:[
+"En caso de ausencia temporal o definitiva del Líder de Operación, el Gerente de Operaciones será responsable de establecer los controles necesarios para garantizar la continuidad operativa y el resguardo adecuado de los equipos tecnológicos asignados a la sucursal.",
+"El Gerente de Operaciones deberá definir las medidas necesarias con los responsables operativos de tienda, incluyendo controles durante cambios de turno, aperturas, cierres y periodos donde los equipos permanezcan sin supervisión directa.",
+"La finalidad de estas medidas será prevenir situaciones de robo, extravío, daño o uso no autorizado de los activos tecnológicos."]},
+{t:"7. USO AUTORIZADO DE EQUIPOS TECNOLÓGICOS", p:[
+"Los equipos tecnológicos proporcionados por Empresa Demo son herramientas de trabajo destinadas exclusivamente al cumplimiento de las funciones operativas y administrativas autorizadas.",
+"Queda prohibido utilizar los equipos para actividades personales, instalar aplicaciones no autorizadas, modificar configuraciones establecidas por Tecnologías de Información, compartir accesos, descargar información ajena a la operación o realizar cualquier actividad que pueda comprometer la seguridad tecnológica de la compañía.",
+"Asimismo, queda prohibida la captura de fotografías, videos o información que no tenga relación directa con las actividades laborales autorizadas.",
+"Cualquier incumplimiento detectado será informado a las áreas correspondientes para la evaluación y aplicación de las medidas administrativas establecidas."]},
+{t:"8. DETERMINACIÓN DE RESPONSABILIDADES", p:[
+"En caso de incumplimiento, daño, pérdida, robo, extravío o uso indebido de los activos tecnológicos, Empresa Demo realizará la investigación correspondiente mediante las áreas involucradas, considerando las circunstancias del incidente, la evidencia disponible, el nivel de afectación, las causas que lo originaron y la responsabilidad determinada.",
+"Derivado de dicha evaluación, podrán aplicarse las medidas administrativas, laborales o legales correspondientes conforme a las políticas internas de la compañía.",
+"Cuando exista afectación económica derivada de daños, pérdida o reposición de equipos tecnológicos, Empresa Demo podrá determinar la recuperación parcial o total del costo asociado, considerando el nivel de daño, condición del equipo, valor del activo y la responsabilidad establecida durante la investigación."]}
+];
+const VALIDACION_OPERACIONES = "El responsable que firma la presente constancia declara conocer y aceptar las obligaciones relacionadas con la custodia, uso adecuado y conservación de los equipos tecnológicos propiedad de Empresa Demo, comprometiéndose a mantener los controles necesarios para evitar pérdidas, daños, robos o usos no autorizados.";
+
+/* ============================= PDF GENERATION ============================= */
+function buildResponsivaPDF(asig){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:"mm", format:"a4"});
+  const marginX = 18, pageW = 210, usableW = pageW - marginX*2;
+  let y = 20;
+
+  function ensureSpace(need){
+    if(y + need > 282){ doc.addPage(); y = 20; }
+  }
+  function heading(text, size){
+    ensureSpace(10);
+    doc.setFont("helvetica","bold"); doc.setFontSize(size||12);
+    doc.text(text, marginX, y);
+    y += size ? size*0.55 : 6;
+  }
+  function paragraph(text, opts){
+    opts = opts || {};
+    doc.setFont("helvetica", opts.bold ? "bold" : "normal");
+    doc.setFontSize(opts.size || 9.5);
+    const lines = doc.splitTextToSize(text, usableW);
+    lines.forEach(line=>{
+      ensureSpace(5.2);
+      doc.text(line, marginX, y);
+      y += 4.6;
+    });
+    y += opts.gap===undefined ? 2.5 : opts.gap;
+  }
+  function row(label, value){
+    ensureSpace(6);
+    doc.setFont("helvetica","bold"); doc.setFontSize(9.2);
+    doc.text(label+":", marginX, y);
+    doc.setFont("helvetica","normal");
+    const lines = doc.splitTextToSize(String(value===undefined||value===null||value===""?"—":value), usableW-52);
+    doc.text(lines, marginX+52, y);
+    y += Math.max(5, lines.length*4.4);
+  }
+
+  const esOp = asig.tipo === "operaciones";
+  doc.setFont("helvetica","bold"); doc.setFontSize(14);
+  doc.text("EMPRESA DEMO — RESPONSIVA DE EQUIPO TECNOLÓGICO", marginX, y); y+=8;
+  doc.setFont("helvetica","normal"); doc.setFontSize(10);
+  doc.text(esOp ? "Formato de Operaciones" : "Formato Individual", marginX, y); y+=9;
+
+  row("Fecha de asignación", fmtDate(asig.fecha));
+
+  y += 2; ensureSpace(8);
+  doc.setDrawColor(210,205,190); doc.line(marginX, y, marginX+usableW, y); y += 7;
+
+  if(!esOp){
+    heading("DATOS DEL COLABORADOR", 11);
+    row("Nombre completo", asig.individual.nombre);
+    row("Puesto", asig.individual.puesto);
+    row("Sucursal", asig.individual.sucursal);
+  } else {
+    heading("DATOS DE LA ASIGNACIÓN OPERATIVA", 11);
+    row("Entrega a (sucursal / región)", asig.operaciones.sucursalRegion);
+    row("Gerente de Operaciones", asig.operaciones.gerente);
+    row("Líder de Operación", asig.operaciones.lider);
+  }
+  y += 3;
+
+  heading("DATOS DEL EQUIPO", 11);
+  row("Equipo / dispositivo", asig.equipo.tipoDispositivo);
+  row("Marca", asig.equipo.marca);
+  row("Modelo", asig.equipo.modelo);
+  row("Número de serie", asig.serial);
+  row("Procesador", asig.equipo.procesador);
+  row("RAM", asig.equipo.ram);
+  row("Almacenamiento", asig.equipo.almacenamiento);
+  row("Número telefónico", asig.equipo.numeroTelefonico);
+  row("Usuario", asig.equipo.usuarioLogin);
+  row("Contraseña", asig.equipo.contrasena);
+  row("Otros accesorios", asig.equipo.otrosAccesorios);
+  row("Estatus del equipo al momento", asig.equipo.estatus);
+  y += 3;
+
+  heading("OBSERVACIONES", 11);
+  paragraph(asig.observaciones || "Sin observaciones.");
+  y += 2;
+
+  if(asig.activa === false){
+    heading("DEVOLUCIÓN / BAJA REGISTRADA", 11);
+    row("Fecha de baja / devolución", fmtDate(asig.fechaBaja));
+    row("Motivo", asig.motivoBaja);
+    row("Estatus del equipo a la devolución", asig.estatusDevolucion);
+    if(asig.notasDevolucion) row("Notas", asig.notasDevolucion);
+    y += 2;
+  }
+
+  doc.addPage(); y = 20;
+  heading("CLÁUSULAS DE RESPONSABILIDAD OPERATIVA Y CUSTODIA DE EQUIPOS DE TECNOLOGÍAS DE INFORMACIÓN", 12);
+  y += 2;
+
+  if(!esOp){
+    paragraph("Por medio de la presente, el área de Sistemas confirma la entrega y/o asignación al colaborador antes indicado de las facilidades de acceso a los recursos informáticos, redes, telecomunicaciones, internet, periféricos y servicios complementarios.");
+    paragraph("Los datos generales de los equipos y recursos tecnológicos asignados para uso exclusivo de las actividades relacionadas con el puesto que ocupa dentro de la compañía se enlistan en la sección de datos del equipo.");
+    y += 2;
+    CLAUSULAS_INDIVIDUAL.forEach(c=>{
+      heading(c.t, 10.5);
+      c.p.forEach(par=> paragraph(par));
+      y += 1.5;
+    });
+    y += 3;
+    heading("VALIDACIÓN Y ACEPTACIÓN DE RESPONSABILIDAD", 11);
+    paragraph(VALIDACION_INDIVIDUAL);
+  } else {
+    paragraph(`Por medio de la presente, el área de Sistemas confirma la entrega y/o asignación a: ${asig.operaciones.sucursalRegion || "la sucursal / región indicada"}. Las facilidades de acceso a los recursos informáticos, redes, telecomunicaciones, internet, periféricos y servicios complementarios quedan sujetas a las condiciones de confidencialidad y los lineamientos generales de uso descritos a continuación.`);
+    y += 1.5;
+    heading(PREAMBULO_OPERACIONES.t, 10.5);
+    PREAMBULO_OPERACIONES.p.forEach(par=> paragraph(par));
+    y += 1.5;
+    CLAUSULAS_OPERACIONES.forEach(c=>{
+      heading(c.t, 10.5);
+      c.p.forEach(par=> paragraph(par));
+      y += 1.5;
+    });
+    y += 3;
+    heading("VALIDACIÓN Y ACEPTACIÓN DE RESPONSABILIDAD", 11);
+    paragraph(VALIDACION_OPERACIONES);
+  }
+
+  y += 10; ensureSpace(30);
+  doc.setDrawColor(150,145,130);
+  if(!esOp){
+    doc.line(marginX, y, marginX+80, y);
+    doc.setFontSize(9); doc.text("Firma del colaborador", marginX, y+5);
+    doc.text(asig.individual.nombre || "", marginX, y+10);
+  } else {
+    doc.line(marginX, y, marginX+80, y);
+    doc.setFontSize(9); doc.text("Firma — Gerente de Operaciones", marginX, y+5);
+    doc.text(asig.operaciones.gerente || "", marginX, y+10);
+    doc.line(marginX+95, y, marginX+175, y);
+    doc.text("Firma — Líder de Operación", marginX+95, y+5);
+    doc.text(asig.operaciones.lider || "", marginX+95, y+10);
+  }
+  y += 20;
+  ensureSpace(10);
+  doc.setFontSize(8); doc.setTextColor(130,124,108);
+  doc.text(`Documento generado por el sistema de control de equipos de Empresa Demo el ${fmtDate(todayISO())}. Corresponde al registro digital de la responsiva firmada en físico en sucursal.`, marginX, y, {maxWidth: usableW});
+  doc.setTextColor(0,0,0);
+
+  return doc;
+}
+
+async function downloadResponsiva(asig){
+  try{
+    if(!window.jspdf){ showToast("No se pudo cargar el generador de PDF.", true); return; }
+    const doc = buildResponsivaPDF(asig);
+    const blob = doc.output("blob");
+    const filename = `Responsiva_${asig.serial}_${asig.fecha}.pdf`;
+    if(state.downloadsCap){
+      await state.downloadsCap.save({filename, data: blob, metadata:{asignacion_id:asig.id||null, serial:asig.serial, fecha:asig.fecha, tipo:asig.tipo}});
+      showToast("Responsiva descargada.");
+    } else {
+      showToast("La descarga no está disponible en esta vista.", true);
+    }
+  }catch(err){
+    if(err && err.code === "declined") return;
+    console.error(err);
+    showToast("No se pudo generar la descarga.", true);
+  }
+}
+
+/* ============================= DASHBOARD ============================= */
+function renderDashboard(){
+  const equiposArr = [...state.equipos.values()];
+  const asigArr = [...state.asignaciones.values()];
+  const total = equiposArr.length;
+  const enUso = equiposArr.filter(e=>e.responsableActual).length;
+  const enStock = total - enUso;
+  const atender = equiposArr.filter(e=>e.estatus==="Dañado"||e.estatus==="Viejo").length;
+
+  document.getElementById("dash-kpis").innerHTML = `
+    <div class="card kpi accent"><div class="num">${total}</div><div class="lbl">Equipos registrados</div></div>
+    <div class="card kpi"><div class="num">${enUso}</div><div class="lbl">Con responsable asignado</div></div>
+    <div class="card kpi"><div class="num">${enStock}</div><div class="lbl">Disponibles en stock</div></div>
+    <div class="card kpi"><div class="num">${atender}</div><div class="lbl">Requieren atención (dañado/viejo)</div></div>
+  `;
+
+  const counts = {}; ESTATUS.forEach(s=>counts[s]=0);
+  equiposArr.forEach(e=>{ if(counts[e.estatus]!==undefined) counts[e.estatus]++; });
+  const max = Math.max(1, ...Object.values(counts));
+  document.getElementById("dash-bars").innerHTML = total===0
+    ? `<div class="empty"><div class="big">📋</div>Aún no hay equipos registrados.<br>Captura tu primera responsiva para comenzar.</div>`
+    : ESTATUS.map(s=>`
+      <div class="barrow">
+        <span>${s}</span>
+        <div class="track"><div class="fill" style="width:${(counts[s]/max*100).toFixed(0)}%;background:var(${ESTATUS_COLOR_VAR[s]})"></div></div>
+        <span class="count">${counts[s]}</span>
+      </div>`).join("");
+
+  const recent = asigArr.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).slice(0,8);
+  document.getElementById("dash-recent").innerHTML = recent.length===0
+    ? `<div class="empty" style="padding:14px 4px;">Sin actividad todavía.</div>`
+    : `<div style="display:flex;flex-direction:column;gap:10px;">` + recent.map(a=>{
+        const quien = a.tipo==="operaciones" ? (a.operaciones.gerente||a.operaciones.sucursalRegion) : a.individual.nombre;
+        return `<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;border-bottom:1px solid var(--border);padding-bottom:8px;">
+          <div><b>${escapeHtml(quien||"—")}</b><br><span class="text-muted mono" style="color:var(--text-muted);">${escapeHtml(a.serial)} · ${escapeHtml(a.equipo.marca||"")} ${escapeHtml(a.equipo.modelo||"")}</span></div>
+          <div style="text-align:right;color:var(--text-muted);white-space:nowrap;">${fmtDate(a.fecha)}${a.activa===false?'<br><span class="badge cerrada">Cerrada</span>':''}</div>
+        </div>`;
+      }).join("") + `</div>`;
+}
+
+/* ============================= FORM: NUEVA RESPONSIVA ============================= */
+function renderFormNueva(){
+  const isOp = state.nuevaTipo === "operaciones";
+  const form = document.getElementById("form-nueva");
+  form.innerHTML = `
+    <div class="form-grid">
+      <div class="field"><label>Fecha de asignación</label><input type="date" name="fecha" value="${todayISO()}" required></div>
+      <div class="field"><label>Capturado por</label><input type="text" name="capturadoPor" placeholder="Tu nombre" required></div>
+
+      ${isOp ? `
+        <div class="field span-2"><label>Sucursal / Región de entrega</label><input type="text" name="sucursalRegion" placeholder="Ej. Sucursal Cuernavaca" required></div>
+        <div class="field"><label>Gerente de Operaciones</label><input type="text" name="gerente" required></div>
+        <div class="field"><label>Líder de Operación</label><input type="text" name="lider"></div>
+      ` : `
+        <div class="field"><label>Nombre completo del colaborador</label><input type="text" name="nombre" required></div>
+        <div class="field"><label>Puesto</label><input type="text" name="puesto" required></div>
+        <div class="field span-2"><label>Sucursal</label><input type="text" name="sucursal" required></div>
+      `}
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-title">Datos del equipo</div>
+    <div class="form-grid cols-3">
+      <div class="field"><label>Equipo / dispositivo</label>
+        <select name="tipoDispositivo">${TIPOS_DISPOSITIVO.map(t=>`<option>${t}</option>`).join("")}</select>
+      </div>
+      <div class="field"><label>Número de serie</label><input type="text" name="serial" class="mono" placeholder="Serial number" required></div>
+      <div class="field"><label>Estatus del equipo</label>
+        <select name="estatus">${ESTATUS.map(s=>`<option>${s}</option>`).join("")}</select>
+      </div>
+      <div class="field"><label>Marca</label><input type="text" name="marca"></div>
+      <div class="field"><label>Modelo</label><input type="text" name="modelo"></div>
+      <div class="field"><label>Número telefónico <span class="hint">(si aplica)</span></label><input type="text" name="numeroTelefonico" placeholder="N/A"></div>
+      <div class="field"><label>Procesador</label><input type="text" name="procesador"></div>
+      <div class="field"><label>RAM</label><input type="text" name="ram"></div>
+      <div class="field"><label>Almacenamiento</label><input type="text" name="almacenamiento"></div>
+      <div class="field"><label>Usuario</label><input type="text" name="usuarioLogin" class="mono"></div>
+      <div class="field"><label>Contraseña</label><input type="text" name="contrasena" class="mono"></div>
+      <div class="field"><label>Otros accesorios</label><input type="text" name="otrosAccesorios" placeholder="Cargador, mochila, mouse..."></div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="field"><label>Observaciones</label>
+      <textarea name="observaciones" rows="2" placeholder="Sin observaciones">Sin observaciones</textarea>
+    </div>
+
+    <div class="divider"></div>
+    <button type="submit" class="btn primary">Guardar responsiva</button>
+  `;
+}
+document.getElementById("tipo-toggle").addEventListener("click",(e)=>{
+  const btn = e.target.closest("button[data-tipo]");
+  if(!btn) return;
+  state.nuevaTipo = btn.dataset.tipo;
+  document.querySelectorAll("#tipo-toggle button").forEach(b=>b.classList.toggle("active", b===btn));
+  renderFormNueva();
+});
+renderFormNueva();
+
+document.getElementById("form-nueva").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  if(!state.db){ showToast("La base de datos no está disponible en esta vista.", true); return; }
+  const fd = new FormData(e.target);
+  const v = Object.fromEntries(fd.entries());
+  const serial = (v.serial||"").trim();
+  if(!serial){ showToast("Captura el número de serie.", true); return; }
+  const serialSlug = slugSerial(serial);
+  const isOp = state.nuevaTipo === "operaciones";
+
+  const equipoData = {
+    tipoDispositivo: v.tipoDispositivo||"", numeroTelefonico: v.numeroTelefonico||"",
+    marca: v.marca||"", modelo: v.modelo||"", procesador: v.procesador||"", ram: v.ram||"",
+    almacenamiento: v.almacenamiento||"", otrosAccesorios: v.otrosAccesorios||"",
+    usuarioLogin: v.usuarioLogin||"", contrasena: v.contrasena||"", estatus: v.estatus||"Nuevo"
+  };
+
+  const asigRecord = {
+    tipo: isOp ? "operaciones" : "individual",
+    fecha: v.fecha,
+    serial,
+    equipo: equipoData,
+    individual: isOp ? null : { nombre: v.nombre||"", puesto: v.puesto||"", sucursal: v.sucursal||"" },
+    operaciones: isOp ? { sucursalRegion: v.sucursalRegion||"", gerente: v.gerente||"", lider: v.lider||"" } : null,
+    observaciones: v.observaciones||"Sin observaciones",
+    capturadoPor: v.capturadoPor||"",
+    activa: true, fechaBaja: null, motivoBaja: null, estatusDevolucion: null, notasDevolucion: null,
+    createdAt: new Date().toISOString()
+  };
+
+  try{
+    const btn = e.target.querySelector("button[type=submit]");
+    btn.disabled = true; btn.textContent = "Guardando...";
+
+    // Close any previous active asignación for this serial (device changes hands)
+    const prevActive = [...state.asignaciones.values()].filter(a=> a.serial.toUpperCase()===serial.toUpperCase() && a.activa);
+    for(const prev of prevActive){
+      await state.db.doc(`asignaciones/${prev.id}`).update({
+        activa:false, fechaBaja: v.fecha, motivoBaja: "Reasignado a nuevo responsable"
+      });
+    }
+
+    const ref = await state.db.collection("asignaciones").add(asigRecord);
+    const responsableActual = isOp ? (asigRecord.operaciones.gerente || asigRecord.operaciones.sucursalRegion) : asigRecord.individual.nombre;
+
+    const equipoRefData = {
+      serial, serialSlug, ...equipoData,
+      responsableActual, sucursalActual: isOp ? asigRecord.operaciones.sucursalRegion : asigRecord.individual.sucursal,
+      tipoActual: asigRecord.tipo, asignacionActualId: ref.id,
+      updatedAt: new Date().toISOString()
+    };
+    const existing = state.equipos.get(serialSlug);
+    const historial = (existing && existing.historialEstatus) ? existing.historialEstatus.slice(-19) : [];
+    historial.push({fecha: v.fecha, estatus: equipoData.estatus, evento: `Entrega a ${responsableActual||"—"}`});
+    equipoRefData.historialEstatus = historial;
+    equipoRefData.createdAt = existing ? existing.createdAt : new Date().toISOString();
+
+    await state.db.doc(`equipos/${serialSlug}`).set(equipoRefData);
+
+    showToast("Responsiva guardada correctamente.");
+    e.target.reset();
+    renderFormNueva();
+
+    downloadResponsiva({...asigRecord, id: ref.id});
+  }catch(err){
+    console.error(err);
+    showToast("No se pudo guardar la responsiva. Intenta de nuevo.", true);
+  }finally{
+    const btn = e.target.querySelector("button[type=submit]");
+    if(btn){ btn.disabled=false; btn.textContent="Guardar responsiva"; }
+  }
+});
+
+/* ============================= BUSCAR POR SERIE ============================= */
+function renderSerieResult(serialInput){
+  const box = document.getElementById("serie-result");
+  const slug = slugSerial(serialInput);
+  const equipo = state.equipos.get(slug);
+  if(!equipo){
+    box.innerHTML = `<div class="card empty"><div class="big">🔍</div>No se encontró ningún equipo con esa serie.<br>Verifica el número o captura una responsiva nueva.</div>`;
+    return;
+  }
+  const hist = [...state.asignaciones.values()].filter(a=>a.serial.toUpperCase()===equipo.serial.toUpperCase())
+    .sort((a,b)=> (b.fecha||"").localeCompare(a.fecha||""));
+
+  box.innerHTML = `
+    <div class="card pad" style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div class="mono" style="font-size:18px;font-weight:600;">${escapeHtml(equipo.serial)}</div>
+          <div style="color:var(--text-muted);">${escapeHtml(equipo.marca||"")} ${escapeHtml(equipo.modelo||"")} · ${escapeHtml(equipo.tipoDispositivo||"")}</div>
+        </div>
+        ${badgeEstatus(equipo.estatus)}
+      </div>
+      <div class="divider"></div>
+      <div class="form-grid cols-3" style="font-size:12.5px;">
+        <div><b>Responsable actual</b><br>${escapeHtml(equipo.responsableActual || "Disponible / en stock")}</div>
+        <div><b>Sucursal actual</b><br>${escapeHtml(equipo.sucursalActual || "—")}</div>
+        <div><b>Última actualización</b><br>${fmtDate((equipo.updatedAt||"").slice(0,10))}</div>
+        <div><b>Procesador / RAM / Almacenamiento</b><br>${escapeHtml(equipo.procesador||"—")} · ${escapeHtml(equipo.ram||"—")} · ${escapeHtml(equipo.almacenamiento||"—")}</div>
+        <div><b>Usuario</b><br class="mono">${escapeHtml(equipo.usuarioLogin||"—")}</div>
+        <div><b>Otros accesorios</b><br>${escapeHtml(equipo.otrosAccesorios||"—")}</div>
+      </div>
+    </div>
+    <div class="section-title">Historial de responsivas (${hist.length})</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${hist.map(a=>{
+        const quien = a.tipo==="operaciones" ? `${a.operaciones.gerente||"—"} / ${a.operaciones.lider||"—"} (${a.operaciones.sucursalRegion||"—"})` : `${a.individual.nombre} — ${a.individual.puesto}`;
+        return `<div class="history-item">
+          <div class="history-top">
+            <div><b>${escapeHtml(quien)}</b></div>
+            <span class="badge ${a.activa?'vigente':'cerrada'}">${a.activa?'Vigente':'Cerrada'}</span>
+          </div>
+          <div class="history-meta">Tipo ${a.tipo==="operaciones"?"Operaciones":"Individual"} · Entregado el ${fmtDate(a.fecha)} · Estatus al momento: ${escapeHtml(a.equipo.estatus)}${a.activa===false?` · Baja: ${fmtDate(a.fechaBaja)} (${escapeHtml(a.motivoBaja||"")})`:""}</div>
+          <div><button class="btn sm" data-action="download" data-id="${a.id}">Descargar responsiva (PDF)</button></div>
+        </div>`;
+      }).join("") || `<div class="empty">Sin historial registrado.</div>`}
+    </div>
+  `;
+}
+document.getElementById("serie-buscar").addEventListener("click", ()=> renderSerieResult(document.getElementById("serie-input").value));
+document.getElementById("serie-input").addEventListener("keydown", e=>{ if(e.key==="Enter") renderSerieResult(e.target.value); });
+
+/* ============================= BUSCAR POR NOMBRE ============================= */
+function renderNombreResult(query){
+  const box = document.getElementById("nombre-result");
+  const q = normalize(query);
+  if(!q){ box.innerHTML = ""; return; }
+  const matches = [...state.asignaciones.values()].filter(a=>{
+    const fields = a.tipo==="operaciones"
+      ? [a.operaciones.gerente, a.operaciones.lider, a.operaciones.sucursalRegion]
+      : [a.individual.nombre, a.individual.puesto, a.individual.sucursal];
+    return fields.some(f=> normalize(f).includes(q));
+  }).sort((a,b)=> (b.fecha||"").localeCompare(a.fecha||""));
+
+  if(matches.length===0){
+    box.innerHTML = `<div class="card empty"><div class="big">🙈</div>No se encontraron responsivas para "${escapeHtml(query)}".</div>`;
+    return;
+  }
+
+  const groups = new Map();
+  matches.forEach(a=>{
+    const key = a.tipo==="operaciones" ? (a.operaciones.gerente||a.operaciones.sucursalRegion) : a.individual.nombre;
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(a);
+  });
+
+  box.innerHTML = [...groups.entries()].map(([nombre, items])=>{
+    return `<div class="card pad person-group">
+      <div class="person-group-head"><h3>${escapeHtml(nombre||"Sin nombre")}</h3><span style="color:var(--text-muted);font-size:12px;">${items.length} responsiva(s)</span></div>
+      ${items.map(a=>{
+        const equipoLine = `${escapeHtml(a.equipo.marca||"")} ${escapeHtml(a.equipo.modelo||"")} · <span class="mono">${escapeHtml(a.serial)}</span>`;
+        return `<div class="history-item">
+          <div class="history-top">
+            <div class="equipo-line"><b>${equipoLine}</b> ${badgeEstatus(a.equipo.estatus)}</div>
+            <span class="badge ${a.activa?'vigente':'cerrada'}">${a.activa?'Vigente':'Cerrada'}</span>
+          </div>
+          <div class="history-meta">Entregado el ${fmtDate(a.fecha)} · Tipo ${a.tipo==="operaciones"?"Operaciones":"Individual"}${a.activa===false?` · Baja registrada el ${fmtDate(a.fechaBaja)} (${escapeHtml(a.motivoBaja||"")})`:""}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn sm" data-action="download" data-id="${a.id}">Descargar responsiva (PDF)</button>
+            ${a.activa ? `<button class="btn sm danger" data-action="baja" data-id="${a.id}">Dar de baja / Devolver equipo</button>` : ``}
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }).join("");
+}
+document.getElementById("nombre-buscar").addEventListener("click", ()=> renderNombreResult(document.getElementById("nombre-input").value));
+document.getElementById("nombre-input").addEventListener("keydown", e=>{ if(e.key==="Enter") renderNombreResult(e.target.value); });
+
+/* ============================= INVENTARIO ============================= */
+function renderInventario(){
+  const texto = normalize(document.getElementById("inv-texto").value);
+  const estatusFiltro = document.getElementById("inv-estatus").value;
+  const sucursalFiltro = document.getElementById("inv-sucursal").value;
+
+  const sucursalSel = document.getElementById("inv-sucursal");
+  const sucursales = [...new Set([...state.equipos.values()].map(e=>e.sucursalActual).filter(Boolean))].sort();
+  const currentVal = sucursalSel.value;
+  sucursalSel.innerHTML = `<option value="">Todas las sucursales</option>` + sucursales.map(s=>`<option ${s===currentVal?'selected':''}>${escapeHtml(s)}</option>`).join("");
+
+  let arr = [...state.equipos.values()];
+  if(estatusFiltro) arr = arr.filter(e=>e.estatus===estatusFiltro);
+  if(sucursalFiltro) arr = arr.filter(e=>e.sucursalActual===sucursalFiltro);
+  if(texto) arr = arr.filter(e=> [e.serial,e.marca,e.modelo,e.responsableActual].some(f=>normalize(f).includes(texto)));
+  arr.sort((a,b)=> (a.serial||"").localeCompare(b.serial||""));
+
+  const tableBox = document.getElementById("inv-table");
+  if(arr.length===0){
+    tableBox.innerHTML = `<div class="empty"><div class="big">📦</div>No hay equipos que coincidan con el filtro.</div>`;
+    return;
+  }
+  tableBox.innerHTML = `<table>
+    <thead><tr><th>Serie</th><th>Equipo</th><th>Estatus</th><th>Responsable actual</th><th>Sucursal</th><th></th></tr></thead>
+    <tbody>
+      ${arr.map(e=>`
+        <tr>
+          <td class="mono">${escapeHtml(e.serial)}</td>
+          <td>${escapeHtml(e.marca||"")} ${escapeHtml(e.modelo||"")}<br><span style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(e.tipoDispositivo||"")}</span></td>
+          <td>${badgeEstatus(e.estatus)}</td>
+          <td>${escapeHtml(e.responsableActual || "En stock")}</td>
+          <td>${escapeHtml(e.sucursalActual||"—")}</td>
+          <td><button class="btn sm" data-action="cambiar-estatus" data-serial="${escapeHtml(e.serialSlug)}">Cambiar estatus</button></td>
+        </tr>`).join("")}
+    </tbody>
+  </table>`;
+}
+["inv-texto","inv-estatus","inv-sucursal"].forEach(id=>{
+  document.getElementById(id).addEventListener("input", renderInventario);
+  document.getElementById(id).addEventListener("change", renderInventario);
+});
+
+/* ============================= MODALS ============================= */
+function openModal(html){
+  document.getElementById("modal-content").innerHTML = html;
+  document.getElementById("modal-overlay").classList.add("show");
+}
+function closeModal(){
+  document.getElementById("modal-overlay").classList.remove("show");
+  document.getElementById("modal-content").innerHTML = "";
+}
+document.getElementById("modal-overlay").addEventListener("click", (e)=>{ if(e.target.id==="modal-overlay") closeModal(); });
+
+function openBajaModal(asigId){
+  const a = state.asignaciones.get(asigId);
+  if(!a) return;
+  const quien = a.tipo==="operaciones" ? (a.operaciones.gerente||a.operaciones.sucursalRegion) : a.individual.nombre;
+  openModal(`
+    <div class="modal-head"><h3>Dar de baja / devolver equipo</h3><button class="btn ghost sm" data-action="close-modal">✕</button></div>
+    <form id="form-baja">
+      <div class="modal-body">
+        <div style="font-size:13px;color:var(--text-muted);">${escapeHtml(quien)} · <span class="mono">${escapeHtml(a.serial)}</span></div>
+        <div class="field"><label>Fecha de baja / devolución</label><input type="date" name="fechaBaja" value="${todayISO()}" required></div>
+        <div class="field"><label>Motivo</label>
+          <select name="motivo">
+            <option>Baja del colaborador</option>
+            <option>Reasignación de equipo</option>
+            <option>Cambio de sucursal</option>
+            <option>Reparación / mantenimiento</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="field"><label>Estatus del equipo a la devolución</label>
+          <select name="estatusDevolucion">${ESTATUS.map(s=>`<option ${s===a.equipo.estatus?'selected':''}>${s}</option>`).join("")}</select>
+        </div>
+        <div class="field"><label>Notas <span class="hint">(opcional)</span></label><textarea name="notas" rows="2"></textarea></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn ghost" data-action="close-modal">Cancelar</button>
+        <button type="submit" class="btn primary">Confirmar baja</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("form-baja").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const v = Object.fromEntries(fd.entries());
+    try{
+      await state.db.doc(`asignaciones/${asigId}`).update({
+        activa:false, fechaBaja:v.fechaBaja, motivoBaja:v.motivo, estatusDevolucion:v.estatusDevolucion, notasDevolucion:v.notas||null
+      });
+      const slug = slugSerial(a.serial);
+      const equipo = state.equipos.get(slug);
+      const historial = (equipo && equipo.historialEstatus)? equipo.historialEstatus.slice(-19):[];
+      historial.push({fecha:v.fechaBaja, estatus:v.estatusDevolucion, evento:`Devolución / baja (${v.motivo})`});
+      await state.db.doc(`equipos/${slug}`).update({
+        estatus: v.estatusDevolucion, responsableActual: null, sucursalActual: null, tipoActual: null, asignacionActualId: null,
+        historialEstatus: historial, updatedAt: new Date().toISOString()
+      });
+      closeModal();
+      showToast("Baja registrada. El equipo vuelve a stock.");
+      downloadResponsiva({...a, activa:false, fechaBaja:v.fechaBaja, motivoBaja:v.motivo, estatusDevolucion:v.estatusDevolucion, notasDevolucion:v.notas||null});
+      if(state.view==="nombre") renderNombreResult(document.getElementById("nombre-input").value);
+      if(state.view==="serie") renderSerieResult(document.getElementById("serie-input").value);
+    }catch(err){
+      console.error(err); showToast("No se pudo registrar la baja.", true);
+    }
+  });
+}
+
+function openEstatusModal(serialSlug){
+  const equipo = state.equipos.get(serialSlug);
+  if(!equipo) return;
+  openModal(`
+    <div class="modal-head"><h3>Cambiar estatus del equipo</h3><button class="btn ghost sm" data-action="close-modal">✕</button></div>
+    <form id="form-estatus">
+      <div class="modal-body">
+        <div style="font-size:13px;color:var(--text-muted);"><span class="mono">${escapeHtml(equipo.serial)}</span> · ${escapeHtml(equipo.marca||"")} ${escapeHtml(equipo.modelo||"")}</div>
+        <div class="field"><label>Nuevo estatus</label>
+          <div class="status-select-row">
+            ${ESTATUS.map(s=>`<label class="chip ${ESTATUS_CLASS[s]} ${s===equipo.estatus?'active':''}"><input type="radio" name="estatus" value="${s}" ${s===equipo.estatus?'checked':''} style="display:none;">${s}</label>`).join("")}
+          </div>
+        </div>
+        <div class="field"><label>Nota <span class="hint">(opcional)</span></label><textarea name="nota" rows="2" placeholder="Motivo del cambio de estatus"></textarea></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn ghost" data-action="close-modal">Cancelar</button>
+        <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  `);
+  document.querySelectorAll("#form-estatus .chip").forEach(chip=>{
+    chip.addEventListener("click", ()=>{
+      document.querySelectorAll("#form-estatus .chip").forEach(c=>c.classList.remove("active"));
+      chip.classList.add("active");
+    });
+  });
+  document.getElementById("form-estatus").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const v = Object.fromEntries(fd.entries());
+    try{
+      const historial = (equipo.historialEstatus||[]).slice(-19);
+      historial.push({fecha: todayISO(), estatus: v.estatus, evento: v.nota ? `Cambio de estatus: ${v.nota}` : "Cambio de estatus"});
+      await state.db.doc(`equipos/${serialSlug}`).update({estatus:v.estatus, historialEstatus:historial, updatedAt:new Date().toISOString()});
+      closeModal();
+      showToast("Estatus actualizado.");
+    }catch(err){
+      console.error(err); showToast("No se pudo actualizar el estatus.", true);
+    }
+  });
+}
+
+document.addEventListener("click",(e)=>{
+  const dl = e.target.closest("[data-action='download']");
+  if(dl){ const a = state.asignaciones.get(dl.dataset.id); if(a) downloadResponsiva(a); return; }
+  const baja = e.target.closest("[data-action='baja']");
+  if(baja){ openBajaModal(baja.dataset.id); return; }
+  const cambiar = e.target.closest("[data-action='cambiar-estatus']");
+  if(cambiar){ openEstatusModal(cambiar.dataset.serial); return; }
+  const close = e.target.closest("[data-action='close-modal']");
+  if(close){ closeModal(); return; }
+});
+
+
+document.addEventListener('infra:user-ready', (ev)=>{
+  const role = ev.detail && ev.detail.user && ev.detail.user.role;
+  if(role==='standard' && state.view==='nueva'){ goTo('dashboard'); }
+  renderNav();
+});
+
+/* ============================= INIT ============================= */
+async function init(){
+  renderNav();
+  const requestedView = location.hash.replace(/^#/, "");
+  const validView = NAV_ITEMS.some(x=>x.id===requestedView) ? requestedView : "dashboard";
+  goTo(validView);
+
+  state.db = new ApiDatabase();
+  state.downloadsCap = browserDownloads;
+  try{
+    await state.db.request('/api/health');
+  }catch(err){
+    console.error('API unavailable', err);
+    document.querySelector(".main").insertAdjacentHTML("afterbegin", `<div class="banner">No hay conexión con el servidor de Infraestructura. Abre este módulo desde la URL del servidor local, no como archivo suelto.</div>`);
+    return;
+  }
+
+  state.db.collection("equipos").onSnapshot(snap=>{
+    state.equipos.clear();
+    snap.docs.forEach(d=> state.equipos.set(d.id, {...d.data(), serialSlug: d.id}));
+    if(state.view==="dashboard") renderDashboard();
+    if(state.view==="inventario") renderInventario();
+  }, err=> console.error("equipos snapshot error", err));
+
+  state.db.collection("asignaciones").limit(2000).onSnapshot(snap=>{
+    state.asignaciones.clear();
+    snap.docs.forEach(d=> state.asignaciones.set(d.id, {...d.data(), id: d.id}));
+    if(state.view==="dashboard") renderDashboard();
+  }, err=> console.error("asignaciones snapshot error", err));
+}
+init();
+</script>
+</body>
+</html>
